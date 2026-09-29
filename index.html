@@ -319,7 +319,7 @@ h3.sub{margin:26px 0 10px;font-size:15px;font-weight:700;padding-left:10px;borde
   font-variant-numeric:tabular-nums;line-height:1.2;word-break:keep-all;
 }
 .stage-gold{
-  font-size:clamp(40px,11vw,84px);color:#C9961A;
+  font-size:clamp(26px,7vw,84px);color:#C9961A;overflow-wrap:anywhere;
   background:linear-gradient(180deg,#F2CE5C 0%,#D4A017 55%,#A87A0C 100%);
   -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
   filter:drop-shadow(0 4px 14px rgba(201,150,26,.35));
@@ -478,6 +478,8 @@ h3.sub{margin:26px 0 10px;font-size:15px;font-weight:700;padding-left:10px;borde
             <div class="clock" id="h-clock">00:00</div>
             <div class="bar"><i id="h-bar-fill" style="width:100%"></i></div>
             <p class="clock-note">시간이 끝나면 자동으로 마감됩니다.</p>
+            <button type="button" class="btn btn-accent btn-lg" id="btn-close-early" style="margin-top:18px" disabled>입찰 조기 종료</button>
+            <p class="clock-note" id="h-close-note">모든 참가인이 입찰서를 제출하면 조기 종료할 수 있습니다.</p>
           </div>
         </div>
 

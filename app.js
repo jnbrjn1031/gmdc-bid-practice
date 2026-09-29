@@ -642,12 +642,18 @@ function sceneNow() {
     const t = state.closedAt ? now - state.closedAt : Infinity;
     if (t < CLOSE_MSG_MS) return { group: 'closed', lines: [{ text: '입찰이 마감되었습니다', big: true }] };
     const host = state.role === 'host';
+    if (st === 'decrypted') return {
+      group: 'decrypted',
+      lines: [{ text: '입찰서 복호화 완료', big: true }, { text: '개찰 대기 중입니다' }],
+      sub: host ? '개찰을 진행하세요.' : null,
+      actions: host ? 'open' : null,
+    };
     return {
       group: 'decrypt',
       lines: [{ text: '입찰서 복호화 중입니다', big: true }],
-      sub: host ? (st === 'closed' ? '입찰서 복호화를 진행하세요.' : '복호화가 끝났습니다. 개찰을 진행하세요.') : null,
+      sub: host ? '입찰서 복호화를 진행하세요.' : null,
       spin: true,
-      actions: host ? (st === 'closed' ? 'decrypt' : 'open') : null,
+      actions: host ? 'decrypt' : null,
     };
   }
 
@@ -863,6 +869,11 @@ function renderHost() {
       $('h-bar-fill').style.width = (100 * left / state.timer.durationMs).toFixed(2) + '%';
       if (left <= 0) closeBidding();
     }
+    const allIn = ids.length > 0 && submitted === ids.length && !inIntro();
+    $('btn-close-early').disabled = !allIn;
+    $('h-close-note').textContent = allIn
+      ? '모든 참가인이 제출했습니다. 지금 마감할 수 있습니다.'
+      : '모든 참가인이 입찰서를 제출하면 조기 종료할 수 있습니다.';
   }
 
   if (st === 'opened' && state.result) $('h-result-body').innerHTML = resultHTML(state.result, null);
@@ -1022,6 +1033,7 @@ function wire() {
   // 집행인 조작
   $('btn-start').onclick     = startBidding;
   $('btn-decrypt').onclick   = decryptBids;
+  $('btn-close-early').onclick = closeBidding;
   $('btn-open').onclick      = openBids;
   $('btn-rebid').onclick     = rebid;
   $('btn-host-exit').onclick = () => { if (confirm('집행인 화면을 나갑니다. 세션은 그대로 남아 있습니다.')) goHome(); };
