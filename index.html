@@ -478,12 +478,15 @@ h3.sub{margin:26px 0 10px;font-size:15px;font-weight:700;padding-left:10px;borde
     </div>
 
     <div class="host-grid" style="margin-top:18px">
-      <!-- 왼쪽: 단계별 조작 -->
+      <!-- 왼쪽: 참가인 명단 · 단계별 조작 -->
       <div class="stack">
-        <div class="act act-primary" id="h-panel-start" hidden>
-          <h2 class="act-title">참가 접수 중</h2>
-          <p class="act-desc">참가인이 모두 들어오면 입찰을 시작하세요. 시작하는 순간 복수예비가격 15개가 만들어지고 제한시간이 흐릅니다.</p>
-          <div class="act-body"><button type="button" class="btn btn-primary btn-lg" id="btn-start">입찰 시작</button></div>
+        <div class="card card-pad">
+          <div class="panel-head">
+            <h2 class="panel-title">참가인</h2>
+            <span class="panel-meta num" id="h-count"></span>
+          </div>
+          <ul class="plist" id="h-plist"></ul>
+          <p class="foot-note num" id="h-submitted"></p>
         </div>
 
         <div class="act" id="h-panel-timer" hidden>
@@ -534,7 +537,7 @@ h3.sub{margin:26px 0 10px;font-size:15px;font-weight:700;padding-left:10px;borde
         </div>
       </div>
 
-      <!-- 오른쪽: 공유 · 명단 -->
+      <!-- 오른쪽: 공유 · 참가 접수 -->
       <div class="stack">
         <div class="card card-pad share" id="h-share">
           <span class="code-label">세션코드</span>
@@ -544,13 +547,10 @@ h3.sub{margin:26px 0 10px;font-size:15px;font-weight:700;padding-left:10px;borde
           <button type="button" class="btn btn-sm" id="btn-copy-link">링크 복사</button>
         </div>
 
-        <div class="card card-pad">
-          <div class="panel-head">
-            <h2 class="panel-title">참가인</h2>
-            <span class="panel-meta num" id="h-count"></span>
-          </div>
-          <ul class="plist" id="h-plist"></ul>
-          <p class="foot-note num" id="h-submitted"></p>
+        <div class="act act-primary" id="h-panel-start" hidden>
+          <h2 class="act-title">참가 접수 중</h2>
+          <p class="act-desc">참가인이 모두 들어오면 입찰을 시작하세요. 시작하는 순간 복수예비가격 15개가 만들어지고 제한시간이 흐릅니다.</p>
+          <div class="act-body"><button type="button" class="btn btn-primary btn-lg" id="btn-start">입찰 시작</button></div>
         </div>
       </div>
     </div>
