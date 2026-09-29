@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>모의 전자입찰 실습</title>
+<meta name="description" content="집행인과 참가인이 각자 기기로 접속해 복수예비가격 추첨부터 개찰까지 체험하는 전자입찰 실습 도구">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+/* ── 토큰 ───────────────────────────────────────────────────────────────── */
+:root{
+  --bg:#F1F6FC;        --bg-grad:#E6EFF9;
+  --surface:#FFFFFF;   --surface-2:#F7FBFF;  --surface-3:#EDF4FB;
+  --line:#DCE8F4;      --line-2:#C3D8EB;
+  --primary:#3F7FC1;   --primary-dark:#2E5F94;  --primary-soft:#A9CFEF;  --primary-wash:#EAF3FC;
+  --accent:#4BAFBC;    --accent-wash:#E6F5F6;
+  --ink:#1E3048;       --ink-2:#44617A;      --muted:#7C93A8;
+  --ok:#3D9B83;        --ok-wash:#E7F5F1;
+  --bad:#C4706C;       --bad-wash:#FAEDEC;
+  --warn:#CE9139;      --warn-wash:#FBF3E5;
+  --r:16px; --r-sm:10px; --r-xs:7px;
+  --shadow:0 1px 2px rgba(30,48,72,.04), 0 10px 26px rgba(63,127,193,.09);
+  --shadow-sm:0 1px 2px rgba(30,48,72,.05), 0 3px 8px rgba(63,127,193,.06);
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:'Pretendard Variable',Pretendard,'Noto Sans KR',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  background:var(--bg);
+  background-image:linear-gradient(180deg,var(--bg-grad) 0,var(--bg) 340px);
+  color:var(--ink);
+  font-size:15px;
+  line-height:1.6;
+  -webkit-text-size-adjust:100%;
+}
+img{max-width:100%}
+[hidden]{display:none!important}
+h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.02em}
+p{margin:0}
+ul,ol{margin:0;padding:0;list-style:none}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2.5px solid var(--primary);outline-offset:2px;border-radius:4px}
+.num{font-variant-numeric:tabular-nums}
+
+/* ── 레이아웃 ───────────────────────────────────────────────────────────── */
+.wrap{max-width:1060px;margin:0 auto;padding-inline:16px}
+.topbar{padding-block:18px 10px}
+.brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.brand-mark{
+  font-size:13px;font-weight:700;letter-spacing:.14em;color:var(--primary-dark);
+  background:var(--primary-wash);border:1px solid var(--line-2);
+  padding:4px 10px;border-radius:999px;
+}
+.brand-name{font-size:19px;font-weight:700}
+.badge{
+  margin-top:8px;display:inline-block;font-size:12.5px;font-weight:600;
+  padding:4px 11px;border-radius:999px;
+  background:var(--ok-wash);color:var(--ok);border:1px solid #CBE6DE;
+}
+.badge.local{background:var(--warn-wash);color:var(--warn);border-color:#EFDCBC}
+main{padding-bottom:56px}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow-sm)}
+.card-pad{padding:22px}
+.stack{display:flex;flex-direction:column;gap:18px}
+
+/* ── 버튼 ───────────────────────────────────────────────────────────────── */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  border:1px solid var(--line-2);background:var(--surface);color:var(--ink);
+  padding:11px 18px;border-radius:var(--r-sm);font-weight:600;
+  transition:background .14s,border-color .14s,transform .08s;
+}
+.btn:hover{background:var(--surface-3)}
+.btn:active{transform:translateY(1px)}
+.btn-primary{background:var(--primary);border-color:var(--primary);color:#fff;box-shadow:0 2px 10px rgba(63,127,193,.28)}
+.btn-primary:hover{background:var(--primary-dark);border-color:var(--primary-dark)}
+.btn-accent{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 2px 10px rgba(75,175,188,.26)}
+.btn-accent:hover{filter:brightness(.94)}
+.btn-lg{padding:16px 26px;font-size:17px;border-radius:12px;width:100%}
+.btn-sm{padding:7px 12px;font-size:13px;border-radius:var(--r-xs)}
+.btn:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
+.btn-ghost{background:transparent;border-color:transparent;color:var(--ink-2)}
+.btn-ghost:hover{background:var(--surface-3)}
+
+/* ── 홈 ─────────────────────────────────────────────────────────────────── */
+.lead{margin-top:6px;color:var(--ink-2);max-width:60ch}
+.role-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:22px}
+.role{
+  text-align:left;display:block;width:100%;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  padding:24px;box-shadow:var(--shadow-sm);transition:border-color .15s,box-shadow .15s,transform .1s;
+}
+.role:hover{border-color:var(--primary-soft);box-shadow:var(--shadow);transform:translateY(-2px)}
+.role-eyebrow{font-size:12.5px;font-weight:700;letter-spacing:.1em;color:var(--primary)}
+.role-title{font-size:21px;font-weight:700;margin-top:6px}
+.role-desc{margin-top:8px;color:var(--ink-2);font-size:14px}
+.role-steps{margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);color:var(--muted);font-size:13px}
+.home-note{margin-top:20px;padding:14px 16px;background:var(--primary-wash);border:1px solid var(--line);border-radius:var(--r-sm);color:var(--ink-2);font-size:13.5px}
+
+/* ── 폼 ─────────────────────────────────────────────────────────────────── */
+.form{display:grid;gap:16px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.field label{display:block;font-size:13px;font-weight:700;color:var(--ink-2);margin-bottom:6px}
+.field .hint{margin-top:6px;font-size:12.5px;color:var(--muted)}
+input,select{
+  width:100%;padding:12px 13px;font:inherit;color:var(--ink);
+  background:var(--surface-2);border:1px solid var(--line-2);border-radius:var(--r-sm);
+}
+input:focus,select:focus{background:#fff;border-color:var(--primary);outline:none;box-shadow:0 0 0 3px rgba(63,127,193,.14)}
+input.amount{font-size:19px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+input.code{font-size:22px;font-weight:700;letter-spacing:.3em;text-align:center;text-transform:uppercase}
+.err{min-height:20px;color:var(--bad);font-size:13.5px;font-weight:600}
+.form-actions{display:flex;gap:10px;justify-content:flex-end;align-items:center}
+
+/* ── 단계 표시 ──────────────────────────────────────────────────────────── */
+.stepbar{display:flex;gap:6px;overflow-x:auto;padding:4px 0 12px;scrollbar-width:none}
+.stepbar::-webkit-scrollbar{display:none}
+.stepbar li{
+  display:flex;align-items:center;gap:7px;flex:0 0 auto;
+  padding:7px 13px 7px 8px;border-radius:999px;
+  background:var(--surface);border:1px solid var(--line);
+  font-size:13px;font-weight:600;color:var(--muted);white-space:nowrap;
+}
+.stepbar li i{
+  display:grid;place-items:center;width:20px;height:20px;border-radius:50%;
+  background:var(--surface-3);color:var(--muted);font-size:11.5px;font-weight:700;font-style:normal;
+}
+.stepbar li.done{color:var(--ok);border-color:#CBE6DE;background:var(--ok-wash)}
+.stepbar li.done i{background:var(--ok);color:#fff}
+.stepbar li.now{color:#fff;background:var(--primary);border-color:var(--primary);box-shadow:0 2px 10px rgba(63,127,193,.26)}
+.stepbar li.now i{background:rgba(255,255,255,.28);color:#fff}
+
+/* ── 세션 요약 ──────────────────────────────────────────────────────────── */
+.sess-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.sess-title{font-size:23px;font-weight:700}
+.tags{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.tag{font-size:12.5px;font-weight:700;padding:3px 10px;border-radius:999px;background:var(--primary);color:#fff}
+.tag-soft{background:var(--accent-wash);color:#2C7E88;border:1px solid #C7E5E8}
+.facts{display:flex;gap:26px;flex-wrap:wrap;margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.fact{min-width:104px}
+.fact dt{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.02em}
+.fact dd{margin:3px 0 0;font-size:17px;font-weight:700;font-variant-numeric:tabular-nums}
+
+.host-grid{display:grid;grid-template-columns:1fr 322px;gap:18px;align-items:start}
+@media (max-width:900px){.host-grid{grid-template-columns:1fr}}
+
+/* ── 참가 공유 ──────────────────────────────────────────────────────────── */
+.share{display:grid;gap:14px;justify-items:center;text-align:center}
+.code-label{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.1em}
+.code{
+  font-size:38px;font-weight:800;letter-spacing:.16em;color:var(--primary-dark);
+  font-variant-numeric:tabular-nums;line-height:1.1;
+}
+#qr{padding:10px;background:#fff;border:1px solid var(--line);border-radius:var(--r-sm);line-height:0}
+#qr img,#qr canvas{display:block}
+.link{
+  font-size:12px;color:var(--muted);word-break:break-all;
+  background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-xs);padding:8px 10px;width:100%;
+}
+
+/* ── 참가자 명단 ────────────────────────────────────────────────────────── */
+.panel-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:12px}
+.panel-title{font-size:15px;font-weight:700}
+.panel-meta{font-size:13px;font-weight:600;color:var(--primary);font-variant-numeric:tabular-nums}
+.plist{display:flex;flex-direction:column;gap:7px;max-height:340px;overflow-y:auto}
+.person{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  padding:9px 12px;border-radius:var(--r-xs);
+  background:var(--surface-2);border:1px solid var(--line);
+}
+.person-name{font-weight:600}
+.person-state{font-size:12px;font-weight:700;color:var(--muted)}
+.person.is-done{background:var(--ok-wash);border-color:#CBE6DE}
+.person.is-done .person-state{color:var(--ok)}
+.empty{padding:16px 12px;color:var(--muted);font-size:13.5px;text-align:center}
+
+/* ── 조작 패널 ──────────────────────────────────────────────────────────── */
+.act{padding:24px;border-radius:var(--r);border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow-sm)}
+.act-title{font-size:17px;font-weight:700}
+.act-desc{margin-top:6px;color:var(--ink-2);font-size:14px}
+.act-body{margin-top:18px}
+.act-primary{border-color:var(--primary-soft);background:linear-gradient(180deg,var(--primary-wash),var(--surface) 70%)}
+.act-ok{border-color:#CBE6DE;background:linear-gradient(180deg,var(--ok-wash),var(--surface) 70%)}
+
+.clock{
+  font-size:64px;font-weight:800;line-height:1;text-align:center;
+  font-variant-numeric:tabular-nums;letter-spacing:.02em;color:var(--primary-dark);
+}
+.clock.urgent{color:var(--bad)}
+.bar{height:9px;border-radius:999px;background:var(--surface-3);overflow:hidden;margin-top:16px;border:1px solid var(--line)}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--primary));transition:width .2s linear}
+.clock-note{margin-top:12px;text-align:center;color:var(--muted);font-size:13px}
+
+.stamp{display:flex;align-items:center;gap:12px;padding:16px 18px;border-radius:var(--r-sm);font-weight:700}
+.stamp-ok{background:var(--ok-wash);color:var(--ok);border:1px solid #CBE6DE}
+.stamp-seal{
+  display:grid;place-items:center;width:38px;height:38px;border-radius:50%;
+  background:var(--ok);color:#fff;font-size:18px;flex:0 0 auto;
+}
+.stamp-sub{display:block;font-size:13px;font-weight:500;color:var(--ink-2);margin-top:2px}
+
+.notice{padding:13px 15px;border-radius:var(--r-sm);font-size:13.5px}
+.notice-warn{background:var(--warn-wash);color:#8A6222;border:1px solid #EFDCBC}
+.notice-info{background:var(--primary-wash);color:var(--ink-2);border:1px solid var(--line-2)}
+
+/* ── 결과 ───────────────────────────────────────────────────────────────── */
+.result-head{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:520px){.result-head{grid-template-columns:1fr}}
+.big-stat{padding:18px;border-radius:var(--r-sm);background:var(--primary-wash);border:1px solid var(--line-2)}
+.big-stat-accent{background:var(--accent-wash);border-color:#C7E5E8}
+.big-stat-label{font-size:12px;font-weight:700;color:var(--ink-2);letter-spacing:.04em}
+.big-stat-value{display:block;margin-top:4px;font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+@media (max-width:400px){.big-stat-value{font-size:22px}}
+
+.winner-card{
+  margin-top:14px;padding:18px 20px;border-radius:var(--r-sm);
+  background:linear-gradient(135deg,#2E5F94,#4BAFBC);color:#fff;
+  box-shadow:0 6px 20px rgba(46,95,148,.26);
+}
+.winner-label{font-size:12px;font-weight:700;letter-spacing:.1em;opacity:.85}
+.winner-name{display:block;font-size:27px;font-weight:800;margin-top:2px;letter-spacing:-.02em}
+.winner-amount{display:block;margin-top:4px;font-size:14px;opacity:.92;font-variant-numeric:tabular-nums}
+
+h3.sub{margin:26px 0 10px;font-size:15px;font-weight:700;padding-left:10px;border-left:3px solid var(--primary-soft)}
+.table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r-sm)}
+.tbl{width:100%;border-collapse:collapse;font-size:14px;min-width:520px}
+.tbl th,.tbl td{padding:11px 13px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+.tbl thead th{background:var(--surface-3);font-size:12.5px;font-weight:700;color:var(--ink-2)}
+.tbl tbody tr:last-child td{border-bottom:none}
+.tbl .col-rank{font-weight:800;color:var(--primary-dark);width:70px}
+.tbl .col-num{text-align:right;font-variant-numeric:tabular-nums}
+.tbl tbody tr:nth-child(1) .col-rank{color:var(--accent)}
+.tbl tr.is-me{background:var(--primary-wash)}
+.badge-me{font-size:11px;font-weight:700;background:var(--primary);color:#fff;padding:1px 7px;border-radius:999px;vertical-align:middle}
+.out{font-size:12px;font-weight:700;color:var(--bad);background:var(--bad-wash);padding:2px 8px;border-radius:999px;border:1px solid #EDCFCD}
+.foot-note{margin-top:9px;font-size:12.5px;color:var(--muted)}
+
+.cand-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+@media (max-width:640px){.cand-grid{grid-template-columns:repeat(3,1fr)}}
+.cand{padding:10px;border-radius:var(--r-xs);background:var(--surface-2);border:1px solid var(--line);text-align:center}
+.cand-no{display:block;font-size:11px;font-weight:700;color:var(--muted)}
+.cand-amt{display:block;margin-top:2px;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
+.cand-vote{display:block;margin-top:6px;font-size:11px;font-weight:600;color:var(--muted)}
+.cand-vote i{display:block;height:4px;border-radius:999px;background:var(--primary-soft);margin-bottom:3px}
+.cand.is-top{background:var(--accent-wash);border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.cand.is-top .cand-no,.cand.is-top .cand-vote{color:#2C7E88}
+.cand.is-top .cand-vote i{background:var(--accent)}
+
+/* ── 참가인 화면 ────────────────────────────────────────────────────────── */
+.bidder{max-width:560px;margin:0 auto}
+.me-chip{
+  display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:700;
+  background:var(--primary);color:#fff;padding:5px 13px;border-radius:999px;
+}
+.wait-box{text-align:center;padding:40px 22px}
+.pulse{width:54px;height:54px;border-radius:50%;margin:0 auto 18px;background:var(--primary-soft);animation:pulse 1.9s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:scale(.86);opacity:.55}50%{transform:scale(1);opacity:1}}
+@media (prefers-reduced-motion:reduce){.pulse{animation:none}}
+.wait-title{font-size:19px;font-weight:700}
+.wait-msg{margin-top:8px;color:var(--ink-2)}
+.wait-count{margin-top:16px;display:inline-block;font-size:13px;font-weight:700;color:var(--primary);background:var(--primary-wash);border:1px solid var(--line-2);padding:5px 13px;border-radius:999px}
+
+.stage-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.stage-no{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--primary);color:#fff;font-size:13px;font-weight:700;flex:0 0 auto}
+.stage-title{font-size:16px;font-weight:700}
+.echo{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  padding:12px 15px;border-radius:var(--r-sm);background:var(--primary-wash);border:1px solid var(--line-2);margin-bottom:16px;
+}
+.echo-label{font-size:12.5px;font-weight:700;color:var(--ink-2)}
+.echo-value{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums}
+
+#b-pad{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+#b-pad button{
+  aspect-ratio:1;min-height:56px;display:grid;place-items:center;
+  font-size:19px;font-weight:700;border-radius:var(--r-sm);
+  background:var(--surface-2);border:1.5px solid var(--line-2);color:var(--ink-2);
+  transition:background .12s,border-color .12s,transform .08s,color .12s;
+}
+#b-pad button:hover{border-color:var(--primary-soft);background:#fff}
+#b-pad button:active{transform:scale(.96)}
+#b-pad button.picked{
+  background:var(--primary);border-color:var(--primary-dark);color:#fff;
+  box-shadow:0 3px 12px rgba(63,127,193,.32);
+}
+.pick-status{display:flex;justify-content:space-between;align-items:center;margin-top:14px;font-size:13.5px;color:var(--ink-2)}
+.pick-count{font-weight:800;color:var(--primary);font-variant-numeric:tabular-nums}
+.done-box{text-align:center;padding:40px 22px}
+.done-seal{
+  width:62px;height:62px;border-radius:50%;margin:0 auto 18px;display:grid;place-items:center;
+  background:var(--ok-wash);color:var(--ok);border:2px solid var(--ok);font-size:28px;font-weight:700;
+}
+.done-box.is-miss .done-seal{background:var(--bad-wash);color:var(--bad);border-color:var(--bad)}
+.foot-actions{margin-top:22px;display:flex;justify-content:center}
+.fact dd.masked{color:var(--muted);font-weight:600;letter-spacing:.04em}
+
+/* ── 연출 오버레이 ──────────────────────────────────────────────────────── */
+.stage{
+  position:fixed;inset:0;z-index:100;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;
+  padding:24px 16px;text-align:center;
+  background:rgba(241,246,252,.66);
+  -webkit-backdrop-filter:blur(14px) saturate(1.1);backdrop-filter:blur(14px) saturate(1.1);
+  opacity:0;transition:opacity .45s ease;
+}
+.stage.on{opacity:1}
+#stage-fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.stage-inner{position:relative;display:flex;flex-direction:column;align-items:center;gap:10px;transition:opacity .45s ease,transform .45s ease}
+.stage-inner.enter{animation:stageIn .55s ease both}
+.stage-inner.leaving{opacity:0;transform:translateY(-8px)}
+.stage-line{font-size:clamp(20px,4.6vw,30px);font-weight:700;color:var(--ink-2);animation:lineIn .6s ease both}
+.stage-big{
+  font-size:clamp(30px,8vw,58px);font-weight:800;color:var(--primary-dark);letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;line-height:1.2;word-break:keep-all;
+}
+.stage-gold{
+  font-size:clamp(40px,11vw,84px);color:#C9961A;
+  background:linear-gradient(180deg,#F2CE5C 0%,#D4A017 55%,#A87A0C 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 4px 14px rgba(201,150,26,.35));
+  animation:goldIn .7s ease both;
+}
+@keyframes goldIn{
+  from{opacity:0;transform:translateY(12px) scale(.94);filter:blur(4px)}
+  to{opacity:1;transform:none;filter:drop-shadow(0 4px 14px rgba(201,150,26,.35))}
+}
+.stage-sub{font-size:14px;color:var(--muted);animation:lineIn .6s ease both}
+.stage-count{
+  font-size:clamp(110px,26vw,180px);font-weight:800;line-height:1;color:var(--primary);
+  text-shadow:0 8px 30px rgba(63,127,193,.25);animation:countPop .9s cubic-bezier(.2,.9,.3,1.2) both;
+}
+.stage-spin{
+  width:46px;height:46px;border-radius:50%;margin-bottom:8px;
+  border:4px solid var(--primary-wash);border-top-color:var(--primary);animation:spin 1s linear infinite;
+}
+.stage-actions{position:relative;width:min(360px,100%)}
+.stage-actions:empty{display:none}
+@keyframes stageIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
+@keyframes lineIn{from{opacity:0;transform:translateY(12px);filter:blur(4px)}to{opacity:1;transform:none;filter:none}}
+@keyframes countPop{0%{opacity:0;transform:scale(1.6)}35%{opacity:1;transform:scale(1)}80%{opacity:1}100%{opacity:.15;transform:scale(.9)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){
+  .stage-inner.enter,.stage-line,.stage-sub,.stage-count{animation:none}
+  .stage-spin{animation-duration:3s}
+}
+</style>
+</head>
+<body>
+
+<div class="wrap topbar">
+  <div class="brand">
+    <span class="brand-mark">실습</span>
+    <span class="brand-name">모의 전자입찰</span>
+  </div>
+  <span id="mode-badge" class="badge">준비 중…</span>
+</div>
+
+<main class="wrap">
+
+  <!-- ══ 홈 ══════════════════════════════════════════════════════════════ -->
+  <section id="s-home" hidden>
+    <h1 style="font-size:26px">역할을 선택하세요</h1>
+    <p class="lead">집행인은 입찰 세션을 개설하고 절차를 진행합니다. 참가인은 세션코드로 들어와 입찰서를 제출합니다.</p>
+
+    <div class="role-grid">
+      <button type="button" class="role" id="btn-role-host">
+        <span class="role-eyebrow">진행자 1명</span>
+        <span class="role-title">입찰 집행인</span>
+        <span class="role-desc">세션 개설 · 입찰 시작 · 입찰서 복호화 · 개찰</span>
+        <span class="role-steps">세션 생성 → 참가 접수 → 입찰 진행 → 입찰 마감 → 복호화 → 개찰</span>
+      </button>
+      <button type="button" class="role" id="btn-role-bidder">
+        <span class="role-eyebrow">최대 20명</span>
+        <span class="role-title">입찰 참가인</span>
+        <span class="role-desc">닉네임과 세션코드로 참가해 입찰금액과 번호를 제출</span>
+        <span class="role-steps">참가 → 대기 → 입찰금액 작성 → 번호 2개 선택 → 제출</span>
+      </button>
+    </div>
+
+    <p class="home-note">
+      실제 전자견적 절차를 따릅니다. 기초금액 ±3% 범위에서 <strong>복수예비가격 15개</strong>가 만들어지고,
+      참가인이 고른 번호 중 <strong>가장 많이 선택된 4개</strong>의 금액을 평균해 예정가격을 산정합니다.
+      예정가격에 낙찰하한율(물품·용역 90%, 공사 89.745%)을 곱한 금액 이상으로 가장 낮게 쓴 참가인이 1위가 됩니다.
+    </p>
+  </section>
+
+  <!-- ══ 세션 생성 ═══════════════════════════════════════════════════════ -->
+  <section id="s-create" hidden>
+    <h1 style="font-size:23px">입찰 세션 생성</h1>
+    <p class="lead">공고 조건을 입력하면 참가용 세션코드가 발급됩니다.</p>
+
+    <div class="card card-pad" style="margin-top:20px">
+      <div class="form">
+        <div class="field">
+          <label for="f-title">입찰명</label>
+          <input id="f-title" type="text" maxlength="60" placeholder="예) 청사 회의실 의자 구매">
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label for="f-category">구분</label>
+            <select id="f-category"></select>
+            <p class="hint">선택하면 낙찰하한율이 자동으로 채워집니다.</p>
+          </div>
+          <div class="field">
+            <label for="f-method">계약방법</label>
+            <select id="f-method"></select>
+            <p class="hint">현재는 수의계약만 지원합니다.</p>
+          </div>
+        </div>
+        <div class="field">
+          <label for="f-base">기초금액</label>
+          <input id="f-base" class="amount num" type="text" inputmode="numeric" placeholder="0" autocomplete="off">
+          <p class="hint">이 금액의 ±3% 범위에서 복수예비가격 15개가 만들어집니다.</p>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label for="f-rate">낙찰하한율 (%)</label>
+            <input id="f-rate" class="num" type="number" step="0.001" min="0" max="100">
+          </div>
+          <div class="field">
+            <label for="f-duration">입찰 제한시간 (초)</label>
+            <input id="f-duration" class="num" type="number" min="10" max="600" step="5" value="60">
+          </div>
+        </div>
+        <p class="err" id="create-err"></p>
+        <div class="form-actions">
+          <button type="button" class="btn btn-ghost" id="btn-create-back">돌아가기</button>
+          <button type="button" class="btn btn-primary" id="btn-create">세션 생성</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 집행인 콘솔 ═════════════════════════════════════════════════════ -->
+  <section id="s-host" hidden>
+    <ol class="stepbar" id="stepbar">
+      <li data-step="1"><i>1</i>세션 생성</li>
+      <li data-step="2"><i>2</i>참가 접수</li>
+      <li data-step="3"><i>3</i>입찰 진행</li>
+      <li data-step="4"><i>4</i>입찰 마감</li>
+      <li data-step="5"><i>5</i>입찰서 복호화</li>
+      <li data-step="6"><i>6</i>개찰</li>
+    </ol>
+
+    <div class="card card-pad">
+      <div class="sess-head">
+        <div>
+          <h1 class="sess-title" id="h-title"></h1>
+          <div class="tags" id="h-tags"></div>
+        </div>
+        <button type="button" class="btn btn-sm btn-ghost" id="btn-host-exit">나가기</button>
+      </div>
+      <dl class="facts">
+        <div class="fact"><dt>기초금액</dt><dd id="h-base"></dd></div>
+        <div class="fact"><dt>낙찰하한율</dt><dd id="h-rate"></dd></div>
+        <div class="fact"><dt>제한시간</dt><dd id="h-dur"></dd></div>
+      </dl>
+    </div>
+
+    <div class="host-grid" style="margin-top:18px">
+      <!-- 왼쪽: 단계별 조작 -->
+      <div class="stack">
+        <div class="act act-primary" id="h-panel-start" hidden>
+          <h2 class="act-title">참가 접수 중</h2>
+          <p class="act-desc">참가인이 모두 들어오면 입찰을 시작하세요. 시작하는 순간 복수예비가격 15개가 만들어지고 제한시간이 흐릅니다.</p>
+          <div class="act-body"><button type="button" class="btn btn-primary btn-lg" id="btn-start">입찰 시작</button></div>
+        </div>
+
+        <div class="act" id="h-panel-timer" hidden>
+          <h2 class="act-title">입찰 진행 중</h2>
+          <p class="act-desc">제출한 참가인의 명단만 실시간으로 표시됩니다. 입찰금액은 복호화 전까지 열람할 수 없습니다.</p>
+          <div class="act-body">
+            <div class="clock" id="h-clock">00:00</div>
+            <div class="bar"><i id="h-bar-fill" style="width:100%"></i></div>
+            <p class="clock-note">시간이 끝나면 자동으로 마감됩니다.</p>
+          </div>
+        </div>
+
+        <div class="act act-ok" id="h-panel-closed" hidden>
+          <h2 class="act-title">입찰 마감</h2>
+          <div class="act-body">
+            <div class="stamp stamp-ok">
+              <span class="stamp-seal">✓</span>
+              <span>입찰 완료
+                <span class="stamp-sub">제한시간이 종료되어 더 이상 입찰서를 받지 않습니다.</span>
+              </span>
+            </div>
+            <button type="button" class="btn btn-primary btn-lg" id="btn-decrypt" style="margin-top:18px">입찰서 복호화</button>
+          </div>
+        </div>
+
+        <div class="act act-ok" id="h-panel-decrypt" hidden>
+          <h2 class="act-title">입찰서 복호화 완료</h2>
+          <div class="act-body">
+            <div class="stamp stamp-ok">
+              <span class="stamp-seal">🔓</span>
+              <span>예정가격 산정 완료
+                <span class="stamp-sub">참가인이 가장 많이 선택한 번호 4개의 평균으로 예정가격이 정해졌습니다. 개찰 전까지 공개되지 않습니다.</span>
+              </span>
+            </div>
+            <button type="button" class="btn btn-accent btn-lg" id="btn-open" style="margin-top:18px">개찰 진행</button>
+          </div>
+        </div>
+
+        <div class="act" id="h-panel-result" hidden>
+          <h2 class="act-title">개찰 결과</h2>
+          <div class="act-body" id="h-result-body"></div>
+          <div class="foot-actions">
+            <button type="button" class="btn" id="btn-rebid">같은 조건으로 재입찰</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 오른쪽: 공유 · 명단 -->
+      <div class="stack">
+        <div class="card card-pad share" id="h-share">
+          <span class="code-label">세션코드</span>
+          <strong class="code" id="h-code"></strong>
+          <div id="qr"></div>
+          <span class="link" id="h-link"></span>
+          <button type="button" class="btn btn-sm" id="btn-copy-link">링크 복사</button>
+        </div>
+
+        <div class="card card-pad">
+          <div class="panel-head">
+            <h2 class="panel-title">참가인</h2>
+            <span class="panel-meta num" id="h-count"></span>
+          </div>
+          <ul class="plist" id="h-plist"></ul>
+          <p class="foot-note num" id="h-submitted"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 참가 ════════════════════════════════════════════════════════════ -->
+  <section id="s-join" hidden>
+    <h1 style="font-size:23px">입찰 참가</h1>
+    <p class="lead">집행인이 안내한 세션코드를 입력하세요.</p>
+
+    <div class="card card-pad bidder" style="margin-top:20px">
+      <div class="form">
+        <div class="field">
+          <label for="j-nick">닉네임</label>
+          <input id="j-nick" type="text" maxlength="12" placeholder="예) 가나상사" autocomplete="off">
+          <p class="hint">명단과 개찰 결과에 표시되는 이름입니다.</p>
+        </div>
+        <div class="field">
+          <label for="j-code">세션코드</label>
+          <input id="j-code" class="code" type="text" inputmode="text" autocapitalize="characters"
+                 autocomplete="off" spellcheck="false" maxlength="6" placeholder="ABC123">
+        </div>
+        <p class="err" id="join-err"></p>
+        <div class="form-actions">
+          <button type="button" class="btn btn-ghost" id="btn-join-back">돌아가기</button>
+          <button type="button" class="btn btn-primary" id="btn-join">참가하기</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ 참가인 콘솔 ═════════════════════════════════════════════════════ -->
+  <section id="s-bidder" hidden>
+    <div class="bidder stack">
+      <div class="card card-pad">
+        <div class="sess-head">
+          <div>
+            <h1 class="sess-title" id="b-title"></h1>
+            <div class="tags" id="b-tags"></div>
+          </div>
+          <span class="me-chip" id="b-me"></span>
+        </div>
+        <dl class="facts">
+          <div class="fact"><dt>기초금액</dt><dd id="b-base"></dd></div>
+          <div class="fact"><dt>낙찰하한율</dt><dd id="b-rate"></dd></div>
+        </dl>
+      </div>
+
+      <!-- 대기 -->
+      <div class="card wait-box" id="b-wait" hidden>
+        <div class="pulse"></div>
+        <h2 class="wait-title" id="b-wait-title">참가 완료</h2>
+        <p class="wait-msg" id="b-wait-msg">집행인이 입찰을 시작하면 자동으로 입찰서 작성 화면으로 넘어갑니다.</p>
+        <span class="wait-count num" id="b-wait-count"></span>
+      </div>
+
+      <!-- 입찰 -->
+      <div id="b-bidding" hidden>
+        <div class="card card-pad">
+          <div class="clock" id="b-clock">00:00</div>
+          <div class="bar"><i id="b-bar-fill" style="width:100%"></i></div>
+        </div>
+
+        <div class="card card-pad" style="margin-top:14px" id="b-stage-amount">
+          <div class="stage-head">
+            <span class="stage-no">1</span>
+            <h2 class="stage-title">입찰금액 작성</h2>
+          </div>
+          <div class="field">
+            <label for="b-amount">입찰금액 (원)</label>
+            <input id="b-amount" class="amount num" type="text" inputmode="numeric" placeholder="0" autocomplete="off">
+            <p class="hint">기초금액을 참고해 직접 판단하세요. 금액 범위에 제한은 없지만 낙찰하한금액에 미달하면 순위 밖으로 처리됩니다.</p>
+          </div>
+          <p class="err" id="b-amount-err"></p>
+          <button type="button" class="btn btn-primary btn-lg" id="btn-amount-next">다음 · 번호 선택</button>
+        </div>
+
+        <div class="card card-pad" style="margin-top:14px" id="b-stage-picks" hidden>
+          <div class="stage-head">
+            <span class="stage-no">2</span>
+            <h2 class="stage-title">추첨 번호 선택</h2>
+          </div>
+          <div class="echo">
+            <span class="echo-label">내 입찰금액</span>
+            <span class="echo-value" id="b-amount-echo"></span>
+          </div>
+          <p class="hint" style="margin-bottom:12px">1~15번에는 예비가격이 숨겨져 있습니다. 두 개를 고르세요. 금액은 개찰 때 공개됩니다.</p>
+          <div id="b-pad"></div>
+          <div class="pick-status">
+            <span>선택한 번호</span>
+            <span class="pick-count" id="b-pick-count">0 / 2</span>
+          </div>
+          <button type="button" class="btn btn-accent btn-lg" id="btn-submit" style="margin-top:16px" disabled>입찰서 제출</button>
+          <div class="foot-actions">
+            <button type="button" class="btn btn-sm btn-ghost" id="btn-pick-back">금액 다시 입력</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 제출 후 대기 -->
+      <div class="card done-box" id="b-done" hidden>
+        <div class="done-seal">✓</div>
+        <h2 class="wait-title" id="b-done-title"></h2>
+        <p class="wait-msg" id="b-done-msg"></p>
+      </div>
+
+      <!-- 결과 -->
+      <div class="card card-pad" id="b-result" hidden>
+        <h2 class="act-title">개찰 결과</h2>
+        <div class="act-body" id="b-result-body"></div>
+      </div>
+
+      <div class="foot-actions">
+        <button type="button" class="btn btn-sm btn-ghost" id="btn-bidder-exit">실습 나가기</button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ══ 연출 오버레이 (시작 발표 · 3·2·1 · 마감 · 복호화 · 개찰 발표) ══════ -->
+<div id="stage" class="stage" hidden aria-live="assertive">
+  <canvas id="stage-fx"></canvas>
+  <div class="stage-inner" id="stage-inner"></div>
+  <div class="stage-actions" id="stage-actions"></div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "sessions": {
+      "$code": {
+        ".read": true,
+        ".write": true,
+
+        ".validate": "$code.length <= 8",
+
+        "meta": {
+          "title":     { ".validate": "newData.isString() && newData.val().length <= 100" },
+          "category":  { ".validate": "newData.isString() && newData.val().length <= 20" },
+          "method":    { ".validate": "newData.isString() && newData.val().length <= 20" },
+          "basePrice": { ".validate": "newData.isNumber() && newData.val() > 0" },
+          "lowerRate": { ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 100" },
+          "$other":    { ".validate": true }
+        },
+
+        "participants": {
+          "$pid": {
+            "nickname": { ".validate": "newData.isString() && newData.val().length <= 20" },
+            "$other":   { ".validate": true }
+          }
+        },
+
+        "bids": {
+          "$pid": {
+            "amount": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "$other": { ".validate": true }
+          }
+        },
+
+        "$other": { ".validate": true }
+      }
+    }
+  }
+}
