@@ -296,7 +296,7 @@ h3.sub{margin:26px 0 10px;font-size:15px;font-weight:700;padding-left:10px;borde
   background:var(--ok-wash);color:var(--ok);border:2px solid var(--ok);font-size:28px;font-weight:700;
 }
 .done-box.is-miss .done-seal{background:var(--bad-wash);color:var(--bad);border-color:var(--bad)}
-.foot-actions{margin-top:22px;display:flex;justify-content:center}
+.foot-actions{margin-top:22px;display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
 .fact dd.masked{color:var(--muted);font-weight:600;letter-spacing:.04em}
 
 /* ── 연출 오버레이 ──────────────────────────────────────────────────────── */
@@ -513,6 +513,7 @@ h3.sub{margin:26px 0 10px;font-size:15px;font-weight:700;padding-left:10px;borde
           <h2 class="act-title">개찰 결과</h2>
           <div class="act-body" id="h-result-body"></div>
           <div class="foot-actions">
+            <button type="button" class="btn btn-accent" id="btn-lottery" hidden>동가 추첨 프로그램</button>
             <button type="button" class="btn" id="btn-rebid">같은 조건으로 재입찰</button>
           </div>
         </div>

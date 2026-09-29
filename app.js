@@ -177,7 +177,7 @@ function computeMinPrice(predicted, ratePercent) {
  * 순위 산정.
  *  · 낙찰하한금액 이상인 입찰만 유효
  *  · 유효 입찰 중 금액이 낮을수록(= 하한에 근접할수록) 상위
- *  · 금액이 같으면 먼저 제출한 쪽이 상위
+ *  · 금액이 같으면 같은 순위(동가) — 1순위 동가는 집행인이 동가 추첨으로 정한다
  *  · 하한 미달은 순위 밖
  */
 function rankBids(participants, bids, minPrice) {
@@ -192,13 +192,48 @@ function rankBids(participants, bids, minPrice) {
     };
   });
   const sent   = rows.filter(r => r.amount != null);
-  const valid  = sent.filter(r => r.amount >= minPrice)
-                     .sort((a, b) => a.amount - b.amount || a.submittedAt - b.submittedAt);
+  const valid  = sent.filter(r => r.amount >= minPrice);
   const under  = sent.filter(r => r.amount < minPrice).sort((a, b) => b.amount - a.amount);
   const absent = rows.filter(r => r.amount == null);
-  valid.forEach((r, i) => { r.rank = i + 1; });
+  assignRanks(valid, null);
   under.forEach(r => { r.rank = null; });
   return { valid, under, absent };
+}
+
+/**
+ * 금액 오름차순으로 정렬하고 순위를 매긴다. 같은 금액은 같은 순위(동가).
+ * drawnPid 가 있으면 그 사람을 동가 무리의 맨 앞에 두고 단독 순위를 준다(동가 추첨 결과).
+ */
+function assignRanks(valid, drawnPid) {
+  valid.sort((a, b) => a.amount - b.amount
+                    || (b.pid === drawnPid) - (a.pid === drawnPid)
+                    || a.submittedAt - b.submittedAt);
+  valid.forEach((r, i) => {
+    const prev = valid[i - 1];
+    r.rank = prev && prev.amount === r.amount && prev.pid !== drawnPid ? prev.rank : i + 1;
+  });
+  return valid;
+}
+
+/** 1순위 금액의 동가 입찰자 목록과 추첨 여부. */
+function tieInfo(r) {
+  const valid = (r && r.valid) || [];
+  const top   = valid[0];
+  const tied  = top ? valid.filter(x => x.amount === top.amount) : [];
+  return { tied: tied.length >= 2 ? tied : [], drawn: !!(r && r.lottery) };
+}
+
+/** 동가 입찰자 중 1명을 무작위로 뽑아 1순위로 확정한다. */
+async function drawLottery() {
+  const r = state.result;
+  const { tied, drawn } = tieInfo(r);
+  if (!tied.length || drawn) return;
+  const pick  = tied[crypto.getRandomValues(new Uint32Array(1))[0] % tied.length];
+  const valid = assignRanks(r.valid.map(x => ({ ...x })), pick.pid);
+  await sync.update('sessions/' + state.code + '/result', {
+    valid,
+    lottery: { pids: tied.map(x => x.pid), winner: pick.pid, at: sync.now() },
+  });
 }
 
 /* 콘솔에서 __selfTest() 로 산정 로직을 검증할 수 있다. */
@@ -242,9 +277,13 @@ function __selfTest() {
   // 순위: 하한 90,000,000 기준
   const parts = { a: { nickname: '가' }, b: { nickname: '나' }, c: { nickname: '다' }, d: { nickname: '라' }, e: { nickname: '마' } };
   const r = rankBids(parts, bids, 90000000);
-  ok('1위 = 라 (동일 금액 중 먼저 제출)', r.valid[0].nickname === '라', r.valid.map(x => x.nickname).join(' > '));
-  ok('2위 = 나', r.valid[1].nickname === '나', r.valid[1].nickname);
-  ok('3위 = 가', r.valid[2].nickname === '가', r.valid[2].nickname);
+  ok('동가 1위 = 라·나 (같은 순위)', r.valid[0].rank === 1 && r.valid[1].rank === 1,
+     r.valid.map(x => x.nickname + x.rank).join(' > '));
+  ok('3위 = 가', r.valid[2].nickname === '가' && r.valid[2].rank === 3, r.valid[2].nickname + r.valid[2].rank);
+  ok('동가 입찰자 2명', tieInfo(r).tied.length === 2, tieInfo(r).tied.length);
+  const drawn = assignRanks(r.valid.map(x => ({ ...x })), 'b');
+  ok('추첨 후 나=1위, 라=2위', drawn[0].nickname === '나' && drawn[0].rank === 1 && drawn[1].rank === 2,
+     drawn.map(x => x.nickname + x.rank).join(' > '));
   ok('하한 미달 1명 (다)', r.under.length === 1 && r.under[0].nickname === '다', r.under.map(x => x.nickname).join(','));
   ok('미제출 1명 (마)', r.absent.length === 1 && r.absent[0].nickname === '마', r.absent.map(x => x.nickname).join(','));
 
@@ -657,9 +696,25 @@ function sceneNow() {
     };
   }
 
+  if (st === 'opened' && state.result && state.result.lottery) {
+    const t = now - state.result.lottery.at;
+    if (t >= OPEN_MS || t < -2000) return null;
+    const winner = (state.result.valid || [])[0];
+    const lines = [{ text: '동가 추첨 결과' }];
+    if (t >= 1000) lines.push({ text: '1순위 입찰자는' });
+    if (t >= 3000) lines.push({ text: winner.nickname + '입니다', big: true, gold: true });
+    return { group: 'lottery', lines, fx: t >= 3000, leaving: t >= OPEN_MS - 500 };
+  }
+
   if (st === 'opened' && state.result && state.result.openedAt) {
     const t = now - state.result.openedAt;
     if (t >= OPEN_MS || t < -2000) return null;
+    if (tieInfo(state.result).tied.length) {
+      const lines = [{ text: '개찰이 완료되었습니다.' }];
+      if (t >= 1000) lines.push({ text: '1순위 동가 입찰자가 ' + tieInfo(state.result).tied.length + '명입니다' });
+      if (t >= 3000) lines.push({ text: '동가 추첨으로 결정합니다', big: true });
+      return { group: 'open', lines, leaving: t >= OPEN_MS - 500 };
+    }
     const winner = (state.result.valid || [])[0];
     const lines = [{ text: '개찰이 완료되었습니다.' }];
     if (t >= 1000) lines.push({ text: winner ? '1순위 입찰자는' : '낙찰하한금액 이상 입찰자가 없어' });
@@ -876,7 +931,13 @@ function renderHost() {
       : '모든 참가인이 입찰서를 제출하면 조기 종료할 수 있습니다.';
   }
 
-  if (st === 'opened' && state.result) $('h-result-body').innerHTML = resultHTML(state.result, null);
+  if (st === 'opened' && state.result) {
+    $('h-result-body').innerHTML = resultHTML(state.result, null);
+    const tie = tieInfo(state.result);
+    $('btn-lottery').hidden   = !tie.tied.length;
+    $('btn-lottery').disabled = tie.drawn;
+    $('btn-lottery').textContent = tie.drawn ? '동가 추첨 완료' : '동가 추첨 프로그램';
+  }
 }
 
 /* 참가인 화면 ------------------------------------------------------------- */
@@ -966,6 +1027,7 @@ function resultHTML(r, mePid) {
   const under  = r.under  || [];
   const absent = r.absent || [];
   const winner = valid[0];
+  const tie    = tieInfo(r);
   const votes  = r.voteCounts || {};
   const maxVote = Math.max(1, ...Object.values(votes));
 
@@ -977,8 +1039,11 @@ function resultHTML(r, mePid) {
       '<strong class="big-stat-value">' + won(r.minPrice) + '</strong></div>' +
   '</div>' +
 
-  (winner
-    ? '<div class="winner-card"><span class="winner-label">낙찰예정자</span>' +
+  (tie.tied.length && !tie.drawn
+    ? '<p class="notice notice-warn">1순위 동가 입찰자가 ' + tie.tied.length + '명입니다 (' +
+      tie.tied.map(x => esc(x.nickname)).join(', ') + '). 집행인의 동가 추첨으로 1순위를 결정합니다.</p>'
+    : winner
+    ? '<div class="winner-card"><span class="winner-label">낙찰예정자' + (tie.drawn ? ' · 동가 추첨' : '') + '</span>' +
       '<strong class="winner-name">' + esc(winner.nickname) + '</strong>' +
       '<span class="winner-amount">' + won(winner.amount) + ' · 사정률 ' + rate(winner.amount) + '</span></div>'
     : '<p class="notice notice-warn">낙찰하한금액 이상으로 입찰한 참가인이 없어 낙찰자가 없습니다.</p>') +
@@ -1034,6 +1099,10 @@ function wire() {
   $('btn-start').onclick     = startBidding;
   $('btn-decrypt').onclick   = decryptBids;
   $('btn-close-early').onclick = closeBidding;
+  $('btn-lottery').onclick = async e => {
+    e.currentTarget.disabled = true;
+    try { await drawLottery(); } catch (err) { console.error(err); e.currentTarget.disabled = false; }
+  };
   $('btn-open').onclick      = openBids;
   $('btn-rebid').onclick     = rebid;
   $('btn-host-exit').onclick = () => { if (confirm('집행인 화면을 나갑니다. 세션은 그대로 남아 있습니다.')) goHome(); };
