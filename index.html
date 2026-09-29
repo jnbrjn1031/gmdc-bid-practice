@@ -326,7 +326,7 @@ h3.sub{margin:26px 0 10px;font-size:15px;font-weight:700;padding-left:10px;borde
   animation:goldIn .7s ease both;
 }
 @keyframes goldIn{
-  from{opacity:0;transform:translateY(12px) scale(.94);filter:blur(4px)}
+  from{opacity:0;transform:translateY(12px) scale(.94);filter:drop-shadow(0 4px 14px rgba(201,150,26,0))}
   to{opacity:1;transform:none;filter:drop-shadow(0 4px 14px rgba(201,150,26,.35))}
 }
 .stage-sub{font-size:14px;color:var(--muted);animation:lineIn .6s ease both}
@@ -341,7 +341,7 @@ h3.sub{margin:26px 0 10px;font-size:15px;font-weight:700;padding-left:10px;borde
 .stage-actions{position:relative;width:min(360px,100%)}
 .stage-actions:empty{display:none}
 @keyframes stageIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
-@keyframes lineIn{from{opacity:0;transform:translateY(12px);filter:blur(4px)}to{opacity:1;transform:none;filter:none}}
+@keyframes lineIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 @keyframes countPop{0%{opacity:0;transform:scale(1.6)}35%{opacity:1;transform:scale(1)}80%{opacity:1}100%{opacity:.15;transform:scale(.9)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){
