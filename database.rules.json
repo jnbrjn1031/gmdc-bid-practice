@@ -5,12 +5,13 @@
 
     "sessions": {
       "$code": {
-        ".read": true,
-        ".write": true,
-
+        ".write": "auth != null && (!data.exists() || data.child('meta/hostUid').val() === auth.uid)",
         ".validate": "$code.length <= 8",
 
         "meta": {
+          ".read": "auth != null",
+          ".validate": "newData.hasChild('hostUid')",
+          "hostUid":   { ".validate": "newData.isString() && (data.exists() ? newData.val() === data.val() : newData.val() === auth.uid)" },
           "title":     { ".validate": "newData.isString() && newData.val().length <= 100" },
           "category":  { ".validate": "newData.isString() && newData.val().length <= 20" },
           "method":    { ".validate": "newData.isString() && newData.val().length <= 20" },
@@ -19,15 +20,25 @@
           "$other":    { ".validate": true }
         },
 
+        "status":   { ".read": "auth != null" },
+        "timer":    { ".read": "auth != null" },
+        "closedAt": { ".read": "auth != null" },
+        "result":   { ".read": "auth != null" },
+
         "participants": {
+          ".read": "auth != null",
           "$pid": {
+            ".write": "auth != null && newData.exists() && root.child('sessions/' + $code + '/meta').exists() && (!data.exists() ? root.child('sessions/' + $code + '/status').val() === 'created' : (data.child('uid').val() === auth.uid || data.child('submitted').val() !== true))",
+            "uid":      { ".validate": "newData.val() === auth.uid || root.child('sessions/' + $code + '/meta/hostUid').val() === auth.uid" },
             "nickname": { ".validate": "newData.isString() && newData.val().length <= 20" },
             "$other":   { ".validate": true }
           }
         },
 
         "bids": {
+          ".read": "auth != null && root.child('sessions/' + $code + '/meta/hostUid').val() === auth.uid",
           "$pid": {
+            ".write": "auth != null && root.child('sessions/' + $code + '/participants/' + $pid + '/uid').val() === auth.uid && root.child('sessions/' + $code + '/status').val() === 'bidding'",
             "amount": { ".validate": "newData.isNumber() && newData.val() >= 0" },
             "$other": { ".validate": true }
           }

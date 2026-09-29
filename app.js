@@ -8,7 +8,9 @@
      4) 화면 상태 · 렌더링
    =========================================================================== */
 
-import { firebaseConfig } from './firebase-config.js';
+import * as cfg from './firebase-config.js';
+const firebaseConfig = cfg.firebaseConfig;
+const hostPinHash    = cfg.hostPinHash || '';   // 예전 설정 파일에 없어도 동작하도록
 
 /* ── 1. 상수 ─────────────────────────────────────────────────────────────── */
 
@@ -45,6 +47,7 @@ const OPEN_MS      = 6500;  // 개찰 발표 전체 길이 → 이후 결과창
 class LocalSync {
   constructor() {
     this.mode = 'local';
+    this.uid = null;          // 로컬 모드에는 인증이 없다
     this.key = 'bidsim_db';
     this.watchers = [];
   }
@@ -108,13 +111,18 @@ class LocalSync {
 
 /** Firebase Realtime Database. 기기 간 실시간 동기화 + 서버 시각 보정. */
 class FirebaseSync {
-  constructor(cfg) { this.mode = 'online'; this.cfg = cfg; this.offset = 0; }
+  constructor(cfg) { this.mode = 'online'; this.cfg = cfg; this.offset = 0; this.uid = null; }
   async init() {
-    const [appMod, dbMod] = await Promise.all([
+    const [appMod, dbMod, authMod] = await Promise.all([
       import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js'),
       import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js'),
+      import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js'),
     ]);
     this.app = appMod.initializeApp(this.cfg);
+    // 익명 로그인 — 기기(브라우저)마다 고정된 uid 가 생긴다. 보안 규칙은 이 uid 로
+    // "세션을 만든 기기만 진행 조작", "참가인은 자기 입찰서만 작성"을 구분한다.
+    const cred = await authMod.signInAnonymously(authMod.getAuth(this.app));
+    this.uid = cred.user.uid;
     this.db  = dbMod.getDatabase(this.app);
     this.fb  = dbMod;
     // 모든 기기의 타이머가 같이 흐르도록 서버와의 시계 차이를 구독한다.
@@ -371,16 +379,48 @@ function subscribe(code, asHost) {
 
 /* ── 홈 ──────────────────────────────────────────────────────────────────── */
 
+/* 참가 링크(QR)로 들어왔거나 한 번이라도 참가인으로 들어간 탭은 "참가인 전용"으로 묶는다.
+   이런 탭은 나가기·돌아가기를 눌러도 역할 선택 화면(집행인 버튼)으로 가지 않고 참가 화면에 머문다. */
+const bidderOnlyFlag = {
+  get() { try { return sessionStorage.getItem('bidsim_bidder_only') === '1'; } catch { return false; } },
+  set() { try { sessionStorage.setItem('bidsim_bidder_only', '1'); } catch {} },
+};
+
+/* 집행인 PIN — firebase-config.js 의 hostPinHash(SHA-256) 와 비교한다. 통과하면 이 탭에서는 다시 묻지 않는다. */
+const hostPinPassed = {
+  get() { try { return sessionStorage.getItem('bidsim_pin_ok') === '1'; } catch { return false; } },
+  set() { try { sessionStorage.setItem('bidsim_pin_ok', '1'); } catch {} },
+};
+
+async function sha256Hex(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+window.__pinHash = async pin => console.log(await sha256Hex(String(pin)));   // 콘솔에서 PIN 해시 만들기
+
+function enterBidderOnly() {
+  state.bidderOnly = true;
+  bidderOnlyFlag.set();
+  $('btn-join-back').hidden = true;
+}
+
 function goHome() {
   unsubAll();
   if (state.role === 'host') store.del('bidsim_host_last');
   tabStore.del();
+  const lastCode = state.code;
   state.role = null; state.code = null; state.pid = null;
   state.meta = state.status = state.timer = state.result = state.closedAt = null;
   state.participants = {}; state.bids = {};
   state.candidates = null; state.predicted = null;
   state.stage = 'amount'; state.draftAmount = null; state.picks = [];
   renderStage();
+  if (state.bidderOnly) {
+    if (lastCode) $('j-code').value = lastCode;
+    $('join-err').textContent = '';
+    show('s-join');
+    return;
+  }
   show('s-home');
 }
 
@@ -415,10 +455,12 @@ async function createSession() {
   $('btn-create').disabled = true;
   try {
     let code = newCode();
-    for (let i = 0; i < 8 && await sync.get('sessions/' + code); i++) code = newCode();
+    for (let i = 0; i < 8 && await sync.get('sessions/' + code + '/meta'); i++) code = newCode();
 
+    const meta = { title, category, method, basePrice, lowerRate, durationMs: duration * 1000, createdAt: sync.now() };
+    if (sync.uid) meta.hostUid = sync.uid;
     await sync.set('sessions/' + code, {
-      meta: { title, category, method, basePrice, lowerRate, durationMs: duration * 1000, createdAt: sync.now() },
+      meta,
       status: 'created',
     });
 
@@ -563,16 +605,24 @@ async function joinSession() {
       }
     }
 
+    // 다른 기기에서 복귀했으면 참가 자격(uid)을 이 기기로 옮긴다. 규칙상 제출 전에만 가능.
+    if (pid && sync.uid && parts[pid].uid !== sync.uid) {
+      await sync.set('sessions/' + code + '/participants/' + pid + '/uid', sync.uid);
+    }
+
     if (!pid) {
       const status = await sync.get('sessions/' + code + '/status');
       if (status && status !== 'created') { err.textContent = '이미 입찰이 진행 중이라 새로 참가할 수 없습니다.'; return; }
       if (Object.keys(parts).length >= MAX_PARTICIPANTS) { err.textContent = '정원(' + MAX_PARTICIPANTS + '명)이 찼습니다.'; return; }
       pid = 'p' + Date.now().toString(36) + randInt(100, 999);
-      await sync.set('sessions/' + code + '/participants/' + pid, { nickname, joinedAt: sync.now(), submitted: false });
+      const me = { nickname, joinedAt: sync.now(), submitted: false };
+      if (sync.uid) me.uid = sync.uid;
+      await sync.set('sessions/' + code + '/participants/' + pid, me);
     }
 
     store.set('bidsim_me_' + code, { pid, nickname });
     tabStore.set({ role: 'bidder', code, pid });
+    enterBidderOnly();
     state.role = 'bidder'; state.code = code; state.pid = pid;
     state.stage = 'amount'; state.draftAmount = null; state.picks = [];
     subscribe(code, false);
@@ -1083,7 +1133,25 @@ function tick() {
 
 function wire() {
   // 홈
-  $('btn-role-host').onclick   = () => { $('create-err').textContent = ''; show('s-create'); $('f-title').focus(); };
+  const openCreate = () => { $('create-err').textContent = ''; show('s-create'); $('f-title').focus(); };
+  $('btn-role-host').onclick = () => {
+    if (state.bidderOnly) return;
+    if (!hostPinHash || hostPinPassed.get()) { openCreate(); return; }
+    $('pin-box').hidden = false; $('pin-err').textContent = ''; $('pin-input').value = ''; $('pin-input').focus();
+  };
+  const checkPin = async () => {
+    const v = $('pin-input').value.trim();
+    if (!v) { $('pin-err').textContent = 'PIN을 입력하세요.'; return; }
+    if (await sha256Hex(v) !== hostPinHash.toLowerCase()) {
+      $('pin-err').textContent = 'PIN이 올바르지 않습니다.'; $('pin-input').select(); return;
+    }
+    hostPinPassed.set();
+    $('pin-box').hidden = true;
+    openCreate();
+  };
+  $('btn-pin-ok').onclick     = checkPin;
+  $('btn-pin-cancel').onclick = () => { $('pin-box').hidden = true; };
+  $('pin-input').onkeydown    = e => { if (e.key === 'Enter') checkPin(); };
   $('btn-role-bidder').onclick = () => { $('join-err').textContent = ''; show('s-join'); $('j-nick').focus(); };
 
   // 세션 생성
@@ -1166,24 +1234,29 @@ async function boot() {
   wire();
 
   const online = !!(firebaseConfig && firebaseConfig.apiKey && firebaseConfig.databaseURL);
-  let fellBack = false;
+  let fellBack = false, authOff = false;
   try {
     sync = await (online ? new FirebaseSync(firebaseConfig).init() : new LocalSync().init());
   } catch (e) {
     console.error('Firebase 연결 실패 — 로컬 모드로 전환합니다.', e);
+    authOff = !!(e && ['auth/operation-not-allowed', 'auth/admin-restricted-operation',
+                       'auth/configuration-not-found'].includes(e.code));
     sync = await new LocalSync().init();
     fellBack = true;
   }
   const badge = $('mode-badge');
   badge.textContent = sync.mode === 'online'
     ? '온라인 모드 · 여러 기기에서 접속할 수 있습니다'
-    : (fellBack ? '연결 실패 · 로컬 모드로 동작합니다' : '로컬 모드 · 이 브라우저의 탭끼리만 동기화됩니다');
+    : authOff  ? 'Firebase 익명 로그인이 꺼져 있습니다 · 설치 가이드 1단계를 확인하세요 (지금은 로컬 모드)'
+    : fellBack ? '연결 실패 · 로컬 모드로 동작합니다'
+    :            '로컬 모드 · 이 브라우저의 탭끼리만 동기화됩니다';
   badge.classList.toggle('local', sync.mode !== 'online');
 
   setInterval(tick, 100);
 
   // 링크에 담긴 세션코드 · 지난번 닉네임 자동 입력
   const q = new URLSearchParams(location.search).get('s');
+  if (q || bidderOnlyFlag.get()) enterBidderOnly();
   if (q) {
     const code = q.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
     $('j-code').value = code;
@@ -1197,7 +1270,7 @@ async function boot() {
      참가 링크로 들어온 새 탭은 항상 참가 화면을 보여준다. 닉네임만 채워 두면
      한 번 눌러 원래 자격으로 돌아갈 수 있고, 다른 이름을 쓰면 별개 참가인이 된다. */
   let resume = tabStore.get();
-  if (!resume && !q) {
+  if (!resume && !state.bidderOnly) {
     const h = store.get('bidsim_host_last');
     if (h && h.code) resume = { role: 'host', code: h.code };
   }
@@ -1222,7 +1295,7 @@ async function boot() {
       return;
     }
   }
-  if (q) { show('s-join'); $('j-nick').focus(); } else show('s-home');
+  if (state.bidderOnly) { show('s-join'); $('j-nick').focus(); } else show('s-home');
 }
 
 boot();

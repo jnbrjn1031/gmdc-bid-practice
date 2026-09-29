@@ -382,6 +382,21 @@ h3.sub{margin:26px 0 10px;font-size:15px;font-weight:700;padding-left:10px;borde
       </button>
     </div>
 
+    <div class="card card-pad" id="pin-box" style="margin-top:16px" hidden>
+      <div class="form">
+        <div class="field">
+          <label for="pin-input">집행인 PIN</label>
+          <input id="pin-input" type="password" inputmode="numeric" autocomplete="off" placeholder="집행인 PIN 입력">
+          <p class="hint">집행인만 세션을 개설할 수 있습니다. 참가인은 ‘입찰 참가인’을 선택하세요.</p>
+        </div>
+        <p class="err" id="pin-err"></p>
+        <div class="row-actions" style="display:flex;gap:10px;justify-content:flex-end">
+          <button type="button" class="btn btn-ghost" id="btn-pin-cancel">취소</button>
+          <button type="button" class="btn btn-primary" id="btn-pin-ok">확인</button>
+        </div>
+      </div>
+    </div>
+
     <p class="home-note">
       실제 전자견적 절차를 따릅니다. 기초금액 ±3% 범위에서 <strong>복수예비가격 15개</strong>가 만들어지고,
       참가인이 고른 번호 중 <strong>가장 많이 선택된 4개</strong>의 금액을 평균해 예정가격을 산정합니다.
