@@ -89,17 +89,8 @@ main{padding-bottom:56px}
 
 /* ── 홈 ─────────────────────────────────────────────────────────────────── */
 .lead{margin-top:6px;color:var(--ink-2);max-width:60ch}
-.role-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:22px}
-.role{
-  text-align:left;display:block;width:100%;
-  background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
-  padding:24px;box-shadow:var(--shadow-sm);transition:border-color .15s,box-shadow .15s,transform .1s;
-}
-.role:hover{border-color:var(--primary-soft);box-shadow:var(--shadow);transform:translateY(-2px)}
-.role-eyebrow{font-size:12.5px;font-weight:700;letter-spacing:.1em;color:var(--primary)}
-.role-title{font-size:21px;font-weight:700;margin-top:6px}
-.role-desc{margin-top:8px;color:var(--ink-2);font-size:14px}
-.role-steps{margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);color:var(--muted);font-size:13px}
+.go-join{display:block;margin:18px auto 0;padding:6px 8px;background:none;border:0;color:var(--muted);font-size:13.5px;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.go-join:hover{color:var(--primary)}
 .home-note{margin-top:20px;padding:14px 16px;background:var(--primary-wash);border:1px solid var(--line);border-radius:var(--r-sm);color:var(--ink-2);font-size:13.5px}
 
 /* ── 폼 ─────────────────────────────────────────────────────────────────── */
@@ -364,38 +355,23 @@ h3.sub{margin:26px 0 10px;font-size:15px;font-weight:700;padding-left:10px;borde
 
   <!-- ══ 홈 ══════════════════════════════════════════════════════════════ -->
   <section id="s-home" hidden>
-    <h1 style="font-size:26px">역할을 선택하세요</h1>
-    <p class="lead">집행인은 입찰 세션을 개설하고 절차를 진행합니다. 참가인은 세션코드로 들어와 입찰서를 제출합니다.</p>
+    <h1 style="font-size:26px">집행인 확인</h1>
+    <p class="lead">입찰 세션을 개설하려면 집행인 PIN을 입력하세요.</p>
 
-    <div class="role-grid">
-      <button type="button" class="role" id="btn-role-host">
-        <span class="role-eyebrow">진행자 1명</span>
-        <span class="role-title">입찰 집행인</span>
-        <span class="role-desc">세션 개설 · 입찰 시작 · 입찰서 복호화 · 개찰</span>
-        <span class="role-steps">세션 생성 → 참가 접수 → 입찰 진행 → 입찰 마감 → 복호화 → 개찰</span>
-      </button>
-      <button type="button" class="role" id="btn-role-bidder">
-        <span class="role-eyebrow">최대 20명</span>
-        <span class="role-title">입찰 참가인</span>
-        <span class="role-desc">닉네임과 세션코드로 참가해 입찰금액과 번호를 제출</span>
-        <span class="role-steps">참가 → 대기 → 입찰금액 작성 → 번호 2개 선택 → 제출</span>
-      </button>
-    </div>
-
-    <div class="card card-pad" id="pin-box" style="margin-top:16px" hidden>
+    <div class="card card-pad" id="pin-box" style="margin-top:20px">
       <div class="form">
         <div class="field">
           <label for="pin-input">집행인 PIN</label>
           <input id="pin-input" type="password" inputmode="numeric" autocomplete="off" placeholder="집행인 PIN 입력">
-          <p class="hint">집행인만 세션을 개설할 수 있습니다. 참가인은 ‘입찰 참가인’을 선택하세요.</p>
+          <p class="hint">집행인만 세션을 개설할 수 있습니다. 참가인은 QR을 찍거나 아래 ‘세션코드로 참가하기’를 누르세요.</p>
         </div>
         <p class="err" id="pin-err"></p>
         <div class="row-actions" style="display:flex;gap:10px;justify-content:flex-end">
-          <button type="button" class="btn btn-ghost" id="btn-pin-cancel">취소</button>
           <button type="button" class="btn btn-primary" id="btn-pin-ok">확인</button>
         </div>
       </div>
     </div>
+    <button type="button" class="go-join" id="btn-go-join-pin">참가인이신가요? 세션코드로 참가하기</button>
 
     <p class="home-note">
       실제 전자견적 절차를 따릅니다. 기초금액 ±3% 범위에서 <strong>복수예비가격 15개</strong>가 만들어지고,
@@ -444,11 +420,11 @@ h3.sub{margin:26px 0 10px;font-size:15px;font-weight:700;padding-left:10px;borde
         </div>
         <p class="err" id="create-err"></p>
         <div class="form-actions">
-          <button type="button" class="btn btn-ghost" id="btn-create-back">돌아가기</button>
           <button type="button" class="btn btn-primary" id="btn-create">세션 생성</button>
         </div>
       </div>
     </div>
+    <button type="button" class="go-join" id="btn-go-join-create">참가인이신가요? 세션코드로 참가하기</button>
   </section>
 
   <!-- ══ 집행인 콘솔 ═════════════════════════════════════════════════════ -->

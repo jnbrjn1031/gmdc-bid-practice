@@ -380,7 +380,7 @@ function subscribe(code, asHost) {
 /* ── 홈 ──────────────────────────────────────────────────────────────────── */
 
 /* 참가 링크(QR)로 들어왔거나 한 번이라도 참가인으로 들어간 탭은 "참가인 전용"으로 묶는다.
-   이런 탭은 나가기·돌아가기를 눌러도 역할 선택 화면(집행인 버튼)으로 가지 않고 참가 화면에 머문다. */
+   이런 탭은 나가기·돌아가기를 눌러도 집행인 화면(PIN·세션 생성)으로 가지 않고 참가 화면에 머문다. */
 const bidderOnlyFlag = {
   get() { try { return sessionStorage.getItem('bidsim_bidder_only') === '1'; } catch { return false; } },
   set() { try { sessionStorage.setItem('bidsim_bidder_only', '1'); } catch {} },
@@ -421,7 +421,29 @@ function goHome() {
     show('s-join');
     return;
   }
+  openHostEntry();
+}
+
+/* 주소로 바로 들어온 탭은 역할 선택 없이 집행인 입구로 간다.
+   PIN이 설정돼 있고 이 탭에서 아직 통과하지 않았으면 PIN 화면, 아니면 곧바로 세션 생성 화면. */
+function openCreate() {
+  $('create-err').textContent = '';
+  show('s-create');
+  $('f-title').focus();
+}
+
+function openHostEntry() {
+  if (!hostPinHash || hostPinPassed.get()) { openCreate(); return; }
+  $('pin-err').textContent = ''; $('pin-input').value = '';
   show('s-home');
+  $('pin-input').focus();
+}
+
+/* QR 없이 주소로 들어온 참가인용 — 참가인 전용으로 묶지 않으므로 '돌아가기'로 집행인 입구에 돌아올 수 있다. */
+function openJoin() {
+  $('join-err').textContent = '';
+  show('s-join');
+  $('j-nick').focus();
 }
 
 /* ── 집행인: 세션 생성 ───────────────────────────────────────────────────── */
@@ -1132,13 +1154,7 @@ function tick() {
 }
 
 function wire() {
-  // 홈
-  const openCreate = () => { $('create-err').textContent = ''; show('s-create'); $('f-title').focus(); };
-  $('btn-role-host').onclick = () => {
-    if (state.bidderOnly) return;
-    if (!hostPinHash || hostPinPassed.get()) { openCreate(); return; }
-    $('pin-box').hidden = false; $('pin-err').textContent = ''; $('pin-input').value = ''; $('pin-input').focus();
-  };
+  // 집행인 PIN
   const checkPin = async () => {
     const v = $('pin-input').value.trim();
     if (!v) { $('pin-err').textContent = 'PIN을 입력하세요.'; return; }
@@ -1146,18 +1162,16 @@ function wire() {
       $('pin-err').textContent = 'PIN이 올바르지 않습니다.'; $('pin-input').select(); return;
     }
     hostPinPassed.set();
-    $('pin-box').hidden = true;
     openCreate();
   };
-  $('btn-pin-ok').onclick     = checkPin;
-  $('btn-pin-cancel').onclick = () => { $('pin-box').hidden = true; };
-  $('pin-input').onkeydown    = e => { if (e.key === 'Enter') checkPin(); };
-  $('btn-role-bidder').onclick = () => { $('join-err').textContent = ''; show('s-join'); $('j-nick').focus(); };
+  $('btn-pin-ok').onclick  = checkPin;
+  $('pin-input').onkeydown = e => { if (e.key === 'Enter') checkPin(); };
+  $('btn-go-join-pin').onclick    = openJoin;
+  $('btn-go-join-create').onclick = openJoin;
 
   // 세션 생성
   $('f-category').onchange  = syncRateWithCategory;
   $('btn-create').onclick   = createSession;
-  $('btn-create-back').onclick = goHome;
   $('f-base').oninput = e => {
     const n = e.target.value.replace(/[^\d]/g, '');
     e.target.value = n ? Number(n).toLocaleString('ko-KR') : '';
@@ -1295,7 +1309,7 @@ async function boot() {
       return;
     }
   }
-  if (state.bidderOnly) { show('s-join'); $('j-nick').focus(); } else show('s-home');
+  if (state.bidderOnly) { show('s-join'); $('j-nick').focus(); } else openHostEntry();
 }
 
 boot();
