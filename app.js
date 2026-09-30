@@ -1154,9 +1154,7 @@ function renderBidder() {
       $('b-amount-echo').textContent = won(state.draftAmount);
       $('b-pick-count').textContent  = state.picks.length + ' / ' + PICK_COUNT;
       $('btn-submit').disabled = state.picks.length !== PICK_COUNT;
-      document.querySelectorAll('#b-pad button').forEach(btn => {
-        btn.classList.toggle('picked', state.picks.includes(Number(btn.dataset.n)));
-      });
+      padButtons.forEach(({ btn, n }) => btn.classList.toggle('picked', state.picks.includes(n)));
     }
   }
 
@@ -1307,6 +1305,7 @@ function wire() {
     if (!n) { $('b-amount-err').textContent = '입찰금액을 입력하세요.'; return; }
     $('b-amount-err').textContent = '';
     state.draftAmount = n; state.stage = 'picks'; state.picks = [];
+    buildPad();
     render();
   };
   $('btn-pick-back').onclick   = () => { state.stage = 'amount'; render(); };
@@ -1318,12 +1317,23 @@ function wire() {
     if (confirm(msg)) leaveAsBidder();
   };
 
-  // 1~15 번호판
+}
+
+/** 예비가격 선택판. 참가인끼리 번호·위치로 담합하지 못하도록 칸에 번호를 쓰지 않고
+    배치를 매번 섞는다. 실제 번호(1~15)는 DOM이 아니라 padButtons 에만 둔다. */
+let padButtons = [];
+function buildPad() {
+  const order = Array.from({ length: CAND_COUNT }, (_, i) => i + 1);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = randInt(0, i);
+    [order[i], order[j]] = [order[j], order[i]];
+  }
   const pad = $('b-pad');
   pad.innerHTML = '';
-  for (let n = 1; n <= CAND_COUNT; n++) {
+  padButtons = order.map((n, pos) => {
     const b = document.createElement('button');
-    b.type = 'button'; b.dataset.n = n; b.textContent = n;
+    b.type = 'button';
+    b.setAttribute('aria-label', '예비가격 칸 ' + (pos + 1));
     b.onclick = () => {
       const i = state.picks.indexOf(n);
       if (i >= 0) state.picks.splice(i, 1);
@@ -1332,7 +1342,8 @@ function wire() {
       render();
     };
     pad.appendChild(b);
-  }
+    return { btn: b, n };
+  });
 }
 
 async function boot() {
