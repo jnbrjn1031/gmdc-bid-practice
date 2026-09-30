@@ -28,9 +28,11 @@
         "participants": {
           ".read": "auth != null",
           "$pid": {
-            ".write": "auth != null && newData.exists() && root.child('sessions/' + $code + '/meta').exists() && (!data.exists() ? root.child('sessions/' + $code + '/status').val() === 'created' : (data.child('uid').val() === auth.uid || data.child('submitted').val() !== true))",
+            ".write": "auth != null && root.child('sessions/' + $code + '/meta').exists() && (newData.exists() ? (!data.exists() ? root.child('sessions/' + $code + '/status').val() === 'created' : (data.child('uid').val() === auth.uid || data.child('submitted').val() !== true)) : (data.child('uid').val() === auth.uid && root.child('sessions/' + $code + '/status').val() === 'created'))",
+            ".validate": "newData.hasChild('nickname')",
             "uid":      { ".validate": "newData.val() === auth.uid || root.child('sessions/' + $code + '/meta/hostUid').val() === auth.uid" },
             "nickname": { ".validate": "newData.isString() && newData.val().length <= 20" },
+            "online":   { ".validate": "newData.isBoolean()" },
             "$other":   { ".validate": true }
           }
         },

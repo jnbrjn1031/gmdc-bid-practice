@@ -98,6 +98,17 @@ class LocalSync {
     cb(v);
     return () => { this.watchers = this.watchers.filter(x => x !== w); };
   }
+  /** 접속 표시. 로컬 모드는 탭을 닫을 때(pagehide) false 로 바꾼다. 대상 레코드가 없으면 만들지 않는다. */
+  presence(path) {
+    const parent = path.split('/').slice(0, -1).join('/');
+    const put = v => { const db = this._read(); if (this._at(db, parent) != null) { this._put(db, path, v); this._commit(db); } };
+    const off = () => put(false);
+    const on  = () => put(true);
+    addEventListener('pagehide', off);
+    addEventListener('pageshow', on);
+    on();
+    return () => { removeEventListener('pagehide', off); removeEventListener('pageshow', on); off(); };
+  }
   _fire() {
     const db = this._read();
     for (const w of this.watchers) {
@@ -135,6 +146,21 @@ class FirebaseSync {
   async set(path, value)  { return this.fb.set(this.fb.ref(this.db, path), value); }
   async update(path, obj) { return this.fb.update(this.fb.ref(this.db, path), obj); }
   watch(path, cb)         { return this.fb.onValue(this.fb.ref(this.db, path), s => cb(s.exists() ? s.val() : null)); }
+
+  /** 접속 표시. 연결될 때마다 true 로 쓰고, 탭을 닫거나 연결이 끊기면 서버가 false 로 바꾼다.
+      레코드가 지워진 뒤에는 규칙(nickname 필수)이 쓰기를 막으므로 빈 레코드가 생기지 않는다. */
+  presence(path) {
+    const r = this.fb.ref(this.db, path);
+    const off = this.fb.onValue(this.fb.ref(this.db, '.info/connected'), s => {
+      if (s.val() !== true) return;
+      this.fb.onDisconnect(r).set(false).then(() => this.fb.set(r, true)).catch(() => {});
+    });
+    return () => {
+      off();
+      this.fb.onDisconnect(r).cancel().catch(() => {});
+      this.fb.set(r, false).catch(() => {});
+    };
+  }
 }
 
 /* ── 3. 산정 로직 (순수 함수) ────────────────────────────────────────────── */
@@ -321,6 +347,8 @@ const state = {
   timer: null,
   closedAt: null,      // 입찰 마감 시각 — 마감 연출 기준
   participants: {},
+  partsLoaded: false,  // 참가인 명단을 한 번이라도 받았는가 (명단에서 빠졌는지 판단용)
+  presenceStop: null,  // 참가인 접속 표시 해제 함수
   bids: {},            // 집행인만 구독한다
   result: null,
   candidates: null,    // 집행인 기기에만 보관 — 서버로 올리지 않는다
@@ -360,10 +388,15 @@ function unsubAll() { state.unsubs.forEach(f => { try { f(); } catch {} }); stat
 
 function subscribe(code, asHost) {
   unsubAll();
+  state.partsLoaded = false;
   const base = 'sessions/' + code;
   const bind = (leaf, key) => state.unsubs.push(sync.watch(base + '/' + leaf, v => {
     state[key] = v;
-    if (key === 'participants' && v == null) state.participants = {};
+    if (key === 'participants') {
+      // 닉네임 없는 조각(지워진 참가인에 뒤늦게 붙은 접속 표시 등)은 명단에서 뺀다.
+      state.participants = Object.fromEntries(Object.entries(v || {}).filter(([, p]) => p && p.nickname));
+      state.partsLoaded = true;
+    }
     if (key === 'bids' && v == null) state.bids = {};
     render();
   }));
@@ -404,20 +437,43 @@ function enterBidderOnly() {
   $('btn-join-back').hidden = true;
 }
 
-function goHome() {
+/* 참가인 접속 표시(participants/<pid>/online) — 집행인 명단의 입장·퇴장 표시에 쓰인다. */
+function startPresence() {
+  stopPresence();
+  if (sync.presence) state.presenceStop = sync.presence('sessions/' + state.code + '/participants/' + state.pid + '/online');
+}
+function stopPresence() {
+  if (state.presenceStop) { try { state.presenceStop(); } catch {} }
+  state.presenceStop = null;
+}
+
+/* 참가인 '실습 나가기'. 입찰 시작 전이면 명단에서 완전히 빠지고(자리 반납),
+   시작 후에는 개찰 결과에 남아야 하므로 퇴장 표시만 한다. */
+async function leaveAsBidder() {
+  const code = state.code, pid = state.pid, st = state.status || 'created';
+  stopPresence();
+  if (st === 'created' && code && pid) {
+    try { await sync.set('sessions/' + code + '/participants/' + pid, null); } catch (e) { console.error(e); }
+    store.del('bidsim_me_' + code);
+  }
+  goHome();
+}
+
+function goHome(joinMsg) {
   unsubAll();
+  stopPresence();
   if (state.role === 'host') store.del('bidsim_host_last');
   tabStore.del();
   const lastCode = state.code;
   state.role = null; state.code = null; state.pid = null;
   state.meta = state.status = state.timer = state.result = state.closedAt = null;
-  state.participants = {}; state.bids = {};
+  state.participants = {}; state.bids = {}; state.partsLoaded = false;
   state.candidates = null; state.predicted = null;
   state.stage = 'amount'; state.draftAmount = null; state.picks = [];
   renderStage();
   if (state.bidderOnly) {
     if (lastCode) $('j-code').value = lastCode;
-    $('join-err').textContent = '';
+    $('join-err').textContent = joinMsg || '';
     show('s-join');
     return;
   }
@@ -585,6 +641,33 @@ async function openBids() {
   });
 }
 
+/** 참가인 명단 새로고침. 서버에서 다시 받아오고, 입찰 시작 전이면 퇴장(연결 끊김)한 참가인을 명단에서 뺀다.
+    빠진 참가인도 같은 링크로 다시 들어오면 새로 참가할 수 있다. */
+async function refreshParticipants() {
+  const b = $('btn-refresh-parts');
+  b.disabled = true;
+  try {
+    const base  = 'sessions/' + state.code;
+    const parts = (await sync.get(base + '/participants')) || {};
+    const status = (await sync.get(base + '/status')) || 'created';
+    const gone  = Object.keys(parts).filter(pid => !parts[pid] || !parts[pid].nickname || parts[pid].online === false);
+    if (status === 'created' && gone.length) {
+      const patch = {};
+      for (const pid of gone) patch['participants/' + pid] = null;
+      await sync.update(base, patch);
+    }
+    state.participants = Object.fromEntries(Object.entries((await sync.get(base + '/participants')) || {})
+      .filter(([, p]) => p && p.nickname));
+    render();
+    b.textContent = status === 'created' && gone.length ? '퇴장 ' + gone.length + '명 정리' : '최신 상태';
+  } catch (e) {
+    console.error(e);
+    b.textContent = '실패';
+  } finally {
+    setTimeout(() => { b.textContent = '새로고침'; b.disabled = false; }, 1500);
+  }
+}
+
 async function rebid() {
   if (!confirm('같은 조건으로 다시 입찰합니다.\n입찰서와 개찰 결과가 지워지고 참가인은 그대로 유지됩니다.')) return;
   state.candidates = null; state.predicted = null;
@@ -609,6 +692,7 @@ async function joinSession() {
   try {
     const meta = await sync.get('sessions/' + code + '/meta');
     if (!meta) { err.textContent = '해당 세션코드를 찾을 수 없습니다. 코드를 다시 확인해 주세요.'; return; }
+    if (!confirm('‘' + meta.title + '’ 입찰에\n‘' + nickname + '’(으)로 참가하시겠습니까?')) return;
 
     const saved = store.get('bidsim_me_' + code);
     const parts = (await sync.get('sessions/' + code + '/participants')) || {};
@@ -648,6 +732,7 @@ async function joinSession() {
     state.role = 'bidder'; state.code = code; state.pid = pid;
     state.stage = 'amount'; state.draftAmount = null; state.picks = [];
     subscribe(code, false);
+    startPresence();
     show('s-bidder');
   } catch (e) {
     err.textContent = '참가에 실패했습니다: ' + (e && e.message ? e.message : e);
@@ -774,7 +859,7 @@ function sceneNow() {
     const winner = (state.result.valid || [])[0];
     const lines = [{ text: '동가 추첨 결과' }];
     if (t >= 1000) lines.push({ text: '1순위 입찰자는' });
-    if (t >= 3000) lines.push({ text: winner.nickname + '입니다', big: true, gold: true });
+    if (t >= 3000) lines.push({ text: winner.nickname + '님 입니다.', big: true, gold: true });
     return { group: 'lottery', lines, fx: t >= 3000, leaving: t >= OPEN_MS - 500 };
   }
 
@@ -790,7 +875,7 @@ function sceneNow() {
     const winner = (state.result.valid || [])[0];
     const lines = [{ text: '개찰이 완료되었습니다.' }];
     if (t >= 1000) lines.push({ text: winner ? '1순위 입찰자는' : '낙찰하한금액 이상 입찰자가 없어' });
-    if (t >= 3000) lines.push({ text: winner ? winner.nickname + '입니다' : '낙찰자가 없습니다', big: true, gold: !!winner });
+    if (t >= 3000) lines.push({ text: winner ? winner.nickname + '님 입니다.' : '낙찰자가 없습니다', big: true, gold: !!winner });
     return { group: 'open', lines, fx: t >= 3000 && !!winner, leaving: t >= OPEN_MS - 500 };
   }
   return null;
@@ -959,16 +1044,20 @@ function renderHost() {
   $('h-code').textContent  = state.code;
   $('h-link').textContent  = joinLink(state.code);
 
-  $('h-count').textContent = ids.length + ' / ' + MAX_PARTICIPANTS + '명';
+  // online === false 인 참가인은 창을 닫았거나 연결이 끊긴 것(퇴장). 값이 없으면 접속 중으로 본다.
+  const gone = ids.filter(pid => parts[pid].online === false).length;
+  $('h-count').textContent = (ids.length - gone) + ' / ' + MAX_PARTICIPANTS + '명' + (gone ? ' · 퇴장 ' + gone : '');
+  $('btn-refresh-parts').hidden = st !== 'created';
   $('h-plist').innerHTML = ids.length
     ? ids.map(pid => {
         const p = parts[pid];
+        const off  = p.online === false;
         const done = st !== 'created' && p.submitted;
-        return '<li class="person ' + (done ? 'is-done' : '') + '">' +
+        const label = st === 'created' ? (off ? '퇴장' : '입장')
+                    : (done ? '제출 완료' : '대기 중') + (off ? ' · 연결 끊김' : '');
+        return '<li class="person' + (done ? ' is-done' : '') + (off && st === 'created' ? ' is-off' : '') + '">' +
                  '<span class="person-name">' + esc(p.nickname) + '</span>' +
-                 (st === 'created'
-                   ? '<span class="person-state">참가</span>'
-                   : '<span class="person-state">' + (done ? '제출 완료' : '대기 중') + '</span>') +
+                 '<span class="person-state">' + label + '</span>' +
                '</li>';
       }).join('')
     : '<li class="empty">아직 참가한 인원이 없습니다. 아래 코드나 QR을 공유하세요.</li>';
@@ -1017,6 +1106,11 @@ function renderBidder() {
   if (!state.meta) return;
   const st = state.status || 'created';
   const me = (state.participants || {})[state.pid];
+  // 입찰 시작 전에 집행인이 명단을 정리해 내 자리가 사라졌으면 참가 화면으로 돌려보낸다.
+  if (!me && st === 'created' && state.partsLoaded) {
+    goHome('참가 명단에서 빠졌습니다. 다시 참가하려면 ‘참가하기’를 눌러 주세요.');
+    return;
+  }
   const mySubmitted = !!(me && me.submitted);
 
   $('b-title').textContent = state.meta.title;
@@ -1187,6 +1281,7 @@ function wire() {
   };
   $('btn-open').onclick      = openBids;
   $('btn-rebid').onclick     = rebid;
+  $('btn-refresh-parts').onclick = refreshParticipants;
   $('btn-host-exit').onclick = () => { if (confirm('집행인 화면을 나갑니다. 세션은 그대로 남아 있습니다.')) goHome(); };
   $('btn-copy-link').onclick = async () => {
     const b = $('btn-copy-link');
@@ -1197,7 +1292,7 @@ function wire() {
 
   // 참가
   $('btn-join').onclick      = joinSession;
-  $('btn-join-back').onclick = goHome;
+  $('btn-join-back').onclick = () => goHome();
   $('j-code').oninput   = e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6); };
   $('j-nick').onkeydown = e => { if (e.key === 'Enter') $('j-code').focus(); };
   $('j-code').onkeydown = e => { if (e.key === 'Enter') joinSession(); };
@@ -1216,7 +1311,12 @@ function wire() {
   };
   $('btn-pick-back').onclick   = () => { state.stage = 'amount'; render(); };
   $('btn-submit').onclick      = submitBid;
-  $('btn-bidder-exit').onclick = () => { if (confirm('실습에서 나갑니다.')) goHome(); };
+  $('btn-bidder-exit').onclick = () => {
+    const msg = (state.status || 'created') === 'created'
+      ? '실습에서 나갑니다.\n참가 명단에서 빠지며, 다시 참가하려면 닉네임을 새로 입력해야 합니다.'
+      : '실습에서 나갑니다.';
+    if (confirm(msg)) leaveAsBidder();
+  };
 
   // 1~15 번호판
   const pad = $('b-pad');
@@ -1305,6 +1405,7 @@ async function boot() {
       state.role = 'bidder'; state.code = resume.code; state.pid = resume.pid;
       tabStore.set({ role: 'bidder', code: resume.code, pid: resume.pid });
       subscribe(resume.code, false);
+      startPresence();
       show('s-bidder');
       return;
     }
