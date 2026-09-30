@@ -889,6 +889,7 @@ function renderStage() {
   const sc = sync ? sceneNow() : null;
 
   if (!sc) {
+    if (stageView.group === 'count' && state.status === 'bidding') sfx.go();   // 3·2·1 이 끝나고 입찰 시작
     if (stageView.group !== null) {
       el.classList.remove('on');
       stageView.group = stageView.key = null;
@@ -921,6 +922,7 @@ function renderStage() {
   if (sc.count != null && sc.count !== stageView.count) {
     stageView.count = sc.count;
     inner.innerHTML = '<div class="stage-count num">' + sc.count + '</div>';
+    sfx.tick(sc.count);
   }
 
   const lines = sc.lines || [];
@@ -965,6 +967,45 @@ function renderStage() {
 
   if (sc.fx) fireworks.start(); else fireworks.stop();
 }
+
+/* 효과음 ------------------------------------------------------------------- */
+/** 3·2·1 카운트다운 효과음. 파일 없이 Web Audio 로 합성한다.
+    브라우저는 사용자가 한 번이라도 화면을 누른 뒤에만 소리를 허용하므로 첫 입력 때 깨워 둔다. */
+const sfx = (() => {
+  let ctx = null;
+  function ac() {
+    if (!ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      ctx = new AC();
+    }
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+  ['pointerdown', 'keydown'].forEach(ev => addEventListener(ev, ac, { passive: true }));
+
+  /** 부드럽게 올라갔다 사라지는 음 하나 */
+  function tone(freq, at, dur, vol) {
+    const c = ac();
+    if (!c || c.state !== 'running') return;
+    const t = c.currentTime + at;
+    const osc = c.createOscillator(), g = c.createGain();
+    osc.type = 'triangle';
+    osc.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(g).connect(c.destination);
+    osc.start(t); osc.stop(t + dur + 0.02);
+  }
+
+  return {
+    // 3 → 2 → 1 로 갈수록 한 음씩 올라간다 (솔 · 라 · 시)
+    tick(n) { tone({ 3: 784, 2: 880, 1: 988 }[n] || 880, 0, 0.22, 0.16); },
+    // 시작: 도-미-솔-도 빠른 상행 아르페지오
+    go() { [1047, 1319, 1568, 2093].forEach((f, i) => tone(f, i * 0.07, i === 3 ? 0.5 : 0.18, 0.13)); },
+  };
+})();
 
 /* 폭죽 --------------------------------------------------------------------- */
 const fireworks = (() => {
