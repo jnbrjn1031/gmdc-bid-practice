@@ -984,26 +984,42 @@ const sfx = (() => {
   }
   ['pointerdown', 'keydown'].forEach(ev => addEventListener(ev, ac, { passive: true }));
 
-  /** 부드럽게 올라갔다 사라지는 음 하나 */
-  function tone(freq, at, dur, vol) {
+  // 피아노 음색: 배음 여러 개를 겹치고, 높은 배음일수록 빨리 사라지게 한다.
+  const PARTIALS = [[1, 1], [2, 0.42], [3, 0.2], [4, 0.1], [5, 0.05]];   // [배수, 세기]
+
+  /** 건반 하나를 치는 소리. dur 는 여운 길이(초) */
+  function key(freq, at, dur, vol) {
     const c = ac();
     if (!c || c.state !== 'running') return;
     const t = c.currentTime + at;
-    const osc = c.createOscillator(), g = c.createGain();
-    osc.type = 'triangle';
-    osc.frequency.value = freq;
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(vol, t + 0.012);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    osc.connect(g).connect(c.destination);
-    osc.start(t); osc.stop(t + dur + 0.02);
+
+    const out = c.createGain();
+    out.gain.value = vol;
+    const lp = c.createBiquadFilter();           // 해머가 친 직후엔 밝고, 곧 부드러워진다
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(Math.min(freq * 9, 12000), t);
+    lp.frequency.exponentialRampToValueAtTime(Math.max(freq * 2.5, 800), t + 0.6);
+    lp.connect(out).connect(c.destination);
+
+    for (const [mul, amp] of PARTIALS) {
+      const osc = c.createOscillator(), g = c.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq * mul * (1 + 0.0004 * mul * mul);   // 현의 미세한 인하모닉
+      const d = dur / (0.6 + mul * 0.4);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(amp, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(amp * 0.35, t + 0.09);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      osc.connect(g).connect(lp);
+      osc.start(t); osc.stop(t + d + 0.05);
+    }
   }
 
   return {
     // 3 → 2 → 1 로 갈수록 한 음씩 올라간다 (솔 · 라 · 시)
-    tick(n) { tone({ 3: 784, 2: 880, 1: 988 }[n] || 880, 0, 0.22, 0.16); },
-    // 시작: 도-미-솔-도 빠른 상행 아르페지오
-    go() { [1047, 1319, 1568, 2093].forEach((f, i) => tone(f, i * 0.07, i === 3 ? 0.5 : 0.18, 0.13)); },
+    tick(n) { key({ 3: 392, 2: 440, 1: 494 }[n] || 440, 0, 1.1, 0.22); },
+    // 시작: 도·미·솔·도 화음을 살짝 흘려 치듯
+    go() { [523, 659, 784, 1047].forEach((f, i) => key(f, i * 0.028, 2.2, 0.15)); },
   };
 })();
 
@@ -1250,12 +1266,12 @@ function resultHTML(r, mePid) {
     : winner
     ? '<div class="winner-card"><span class="winner-label">낙찰예정자' + (tie.drawn ? ' · 동가 추첨' : '') + '</span>' +
       '<strong class="winner-name">' + esc(winner.nickname) + '</strong>' +
-      '<span class="winner-amount">' + won(winner.amount) + ' · 사정률 ' + rate(winner.amount) + '</span></div>'
+      '<span class="winner-amount">' + won(winner.amount) + ' · 투찰율 ' + rate(winner.amount) + '</span></div>'
     : '<p class="notice notice-warn">낙찰하한금액 이상으로 입찰한 참가인이 없어 낙찰자가 없습니다.</p>') +
 
   '<h3 class="sub">입찰 순위</h3>' +
   '<div class="table-wrap"><table class="tbl">' +
-    '<thead><tr><th>순위</th><th>참가인</th><th>입찰금액</th><th>사정률</th><th>하한 대비</th></tr></thead><tbody>' +
+    '<thead><tr><th>순위</th><th>참가인</th><th>입찰금액</th><th>투찰율</th><th>하한 대비</th></tr></thead><tbody>' +
       valid.map(x => row(x, x.rank)).join('') +
       under.map(x => row(x, '<span class="out">순위 밖</span>')).join('') +
       (!valid.length && !under.length ? '<tr><td colspan="5" class="empty">제출된 입찰서가 없습니다.</td></tr>' : '') +
